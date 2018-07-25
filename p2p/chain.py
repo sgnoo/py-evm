@@ -202,8 +202,8 @@ class BaseHeaderChainSyncer(BaseService, PeerSubscriber):
                 self.logger.warn("Timeout waiting for header batch from %s, aborting sync", peer)
                 await peer.disconnect(DisconnectReason.timeout)
                 break
-            except ValidationError:
-                self.logger.warn("Invalid header response sent by peer.")
+            except ValidationError as err:
+                self.logger.warn("Invalid header response sent by peer %s disconnecting: %s", peer, err)
                 await peer.disconnect(DisconnectReason.useless_peer)
                 break
 
@@ -754,10 +754,13 @@ class PeerRequestHandler(CancellableMixin):
                 self.db.coro_get_block_header_by_hash(cast(Hash32, request.block_number_or_hash)))
             return request.generate_block_numbers(header.block_number)
         elif isinstance(request.block_number_or_hash, int):
+            # We don't need to pass in the block number to
+            # `generate_block_numbers` since the request is based on a numbered
+            # block identifier.
             return request.generate_block_numbers()
         else:
             raise TypeError(
-                "Unexpected type for 'block_number_or_hash': %s",
+                "Invariant: unexpected type for 'block_number_or_hash': %s",
                 type(request.block_number_or_hash),
             )
 

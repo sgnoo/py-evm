@@ -316,11 +316,11 @@ class LESProtocol(Protocol):
         self.send(header, body)
 
     def send_get_block_headers(self,
-                               request_id: int,
                                block_number_or_hash: BlockIdentifier,
                                max_headers: int,
                                skip: int,
                                reverse: bool,
+                               request_id: int,
                                ) -> None:
         """Send a GetBlockHeaders msg to the remote.
 

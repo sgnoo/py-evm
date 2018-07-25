@@ -182,12 +182,19 @@ class HeaderRequest(NamedTuple):
     def validate_headers(self,
                          headers: Tuple[BlockHeader, ...]) -> None:
         if not headers:
-            # empty response is always valid (TODO: deal with this)
+            # An empty response is always valid
             return
         elif not self.is_numbered:
             first_header = headers[0]
             if first_header.hash != self.block_number_or_hash:
-                raise ValueError("TODO: mismatched first block hash")
+                raise ValueError(
+                    "Returned headers cannot be matched to header request. "
+                    "Expected first header to have hash of {0} but instead got "
+                    "{1}.".format(
+                        encode_hex(self.block_number_or_hash),
+                        encode_hex(first_header.hash),
+                    )
+                )
 
         block_numbers: Tuple[BlockNumber, ...] = tuple(
             header.block_number for header in headers
@@ -214,7 +221,11 @@ class HeaderRequest(NamedTuple):
             reverse=self.reverse,
         ))
         if block_numbers != expected_order:
-            raise ValueError('Invalid ordering')
+            raise ValueError(
+                'Returned headers are not correctly ordered.\n'
+                'Expected: {0}\n'
+                'Got     : {1}\n'.format(expected_order, block_numbers)
+            )
 
         # check that all provided numbers are an ordered subset of the master
         # sequence.
@@ -224,23 +235,11 @@ class HeaderRequest(NamedTuple):
                 if value == number:
                     break
             else:
-                raise ValueError('Unmatched number')
-
-    def is_valid_headers(self, headers: Tuple[BlockHeader, ...]) -> bool:
-        try:
-            self.validate_headers(headers)
-        except ValueError:
-            return False
-        else:
-            return True
-
-    def is_valid_sequence(self, block_numbers: Tuple[BlockNumber, ...]) -> bool:
-        try:
-            self.validate_sequence(block_numbers)
-        except ValueError:
-            return False
-        else:
-            return True
+                raise ValueError(
+                    'Returned headers contain an unexpected block number.\n'
+                    'Unexpected Number: {0}\n'
+                    'Expected Numbers : {1}'.format(number, expected_numbers)
+                )
 
 
 class BasePeer(BaseService):
@@ -668,11 +667,11 @@ class LESPeer(BasePeer):
             reverse,
         )
         self.sub_proto.send_get_block_headers(
-            request_id,
             request.block_number_or_hash,
             request.max_headers,
             request.skip,
             request.reverse,
+            request_id,
         )
         return request
 
@@ -1172,7 +1171,7 @@ def _test() -> None:
         else:
             peer = cast(LESPeer, peer)
             request_id = 1
-            peer.sub_proto.send_get_block_headers(request_id, block_hash, 1, 0, False)
+            peer.sub_proto.send_get_block_headers(block_hash, 1, 0, False, request_id)
             peer.sub_proto.send_get_block_bodies([block_hash], request_id + 1)
             peer.sub_proto.send_get_receipts(block_hash, request_id + 2)
 
