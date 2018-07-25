@@ -657,7 +657,7 @@ class LESPeer(BasePeer):
                               block_number_or_hash: BlockIdentifier,
                               max_headers: int = None,
                               skip: int = 0,
-                              reverse: bool = True) -> HeaderRequest:
+                              reverse: bool = False) -> HeaderRequest:
         if max_headers is None:
             max_headers = self.max_headers_fetch
         request_id = gen_request_id()
@@ -955,7 +955,11 @@ class PeerPool(BaseService, AsyncIterable[BasePeer]):
                 break
 
             start_block = vm_class.dao_fork_block_number - 1
-            request = peer.request_block_headers(start_block, max_headers=2)  # type: ignore
+            request = cast(ETHPeer, peer).request_block_headers(
+                start_block,
+                max_headers=2,
+                reverse=False,
+            )
             start = time.time()
             try:
                 while True:
