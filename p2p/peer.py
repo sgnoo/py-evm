@@ -20,7 +20,6 @@ from typing import (
     Dict,
     Iterator,
     List,
-    NamedTuple,
     TYPE_CHECKING,
     Tuple,
     Type,
@@ -51,7 +50,7 @@ from eth_keys import (
 from eth.chains.mainnet import MAINNET_NETWORK_ID
 from eth.chains.ropsten import ROPSTEN_NETWORK_ID
 from eth.constants import GENESIS_BLOCK_NUMBER
-from eth.exceptions import ValidationError
+from eth.exceptions import ValidationError as EthValidationError
 from eth.rlp.headers import BlockHeader
 from eth.vm.base import BaseVM
 from eth.vm.forks import HomesteadVM
@@ -74,6 +73,7 @@ from p2p.exceptions import (
     UnexpectedMessage,
     UnknownProtocolCommand,
     UnreachablePeer,
+    ValidationError,
 )
 from p2p.cancel_token import CancelToken
 from p2p.service import BaseService
@@ -143,11 +143,38 @@ async def handshake(remote: Node,
     return peer
 
 
-class HeaderRequest(NamedTuple):
+class BaseRequest(ABC):
+    @abstractmethod
+    def validate_response(self, response: Any) -> None:
+        pass
+
+
+class HeaderRequest(BaseRequest):
     block_number_or_hash: BlockIdentifier
     max_headers: int
     skip: int
     reverse: bool
+
+    def __init__(self,
+                 block_number_or_hash: BlockIdentifier,
+                 max_headers: int,
+                 skip: int,
+                 reverse: bool) -> None:
+        self.block_number_or_hash = block_number_or_hash
+        self.max_headers = max_headers
+        self.skip = skip
+        self.reverse = reverse
+
+    def validate_response(self, response: Any) -> None:
+        """
+        Core `Request` API used for validation.
+        """
+        if not isinstance(response, tuple):
+            raise ValidationError("Response to `HeaderRequest` must be a tuple")
+        elif not all(isinstance(item, BlockHeader) for item in response):
+            raise ValidationError("Response must be a tuple of `BlockHeader` objects")
+
+        return self.validate_headers(cast(Tuple[BlockHeader, ...], response))
 
     def generate_block_numbers(self,
                                block_number: BlockNumber=None) -> Tuple[BlockNumber, ...]:
@@ -187,7 +214,7 @@ class HeaderRequest(NamedTuple):
         elif not self.is_numbered:
             first_header = headers[0]
             if first_header.hash != self.block_number_or_hash:
-                raise ValueError(
+                raise ValidationError(
                     "Returned headers cannot be matched to header request. "
                     "Expected first header to have hash of {0} but instead got "
                     "{1}.".format(
@@ -212,7 +239,7 @@ class HeaderRequest(NamedTuple):
         # check for numbers that should not be present.
         unexpected_numbers = set(block_numbers).difference(expected_numbers)
         if unexpected_numbers:
-            raise ValueError(
+            raise ValidationError(
                 'Unexpected numbers: {0}'.format(unexpected_numbers))
 
         # check that the numbers are correctly ordered.
@@ -221,7 +248,7 @@ class HeaderRequest(NamedTuple):
             reverse=self.reverse,
         ))
         if block_numbers != expected_order:
-            raise ValueError(
+            raise ValidationError(
                 'Returned headers are not correctly ordered.\n'
                 'Expected: {0}\n'
                 'Got     : {1}\n'.format(expected_order, block_numbers)
@@ -235,7 +262,7 @@ class HeaderRequest(NamedTuple):
                 if value == number:
                     break
             else:
-                raise ValueError(
+                raise ValidationError(
                     'Returned headers contain an unexpected block number.\n'
                     'Unexpected Number: {0}\n'
                     'Expected Numbers : {1}'.format(number, expected_numbers)
@@ -282,7 +309,6 @@ class BasePeer(BaseService):
 
         # TODO: figure out this data structure
         self.pending_requests = {}
-        self.matched_responses = {}
 
         self.egress_mac = egress_mac
         self.ingress_mac = ingress_mac
@@ -697,13 +723,15 @@ class ETHPeer(BasePeer):
             if actual_td > self.head_td:
                 self.head_hash = actual_head
                 self.head_td = actual_td
-        elif isinstance(cmd, eth.BlockHeaders):
-            # try to match with a request
-            for request, waiter in self.pending_requests.items():
-                if request.is_valid_headers(msg):
-                    self.matched_responses[request] = msg
-                    waiter.set()
-                    break
+        elif type(cmd) in self.pending_requests:
+            request, future = self.pending_requests[type(cmd)]
+            try:
+                request.validate_response(msg)
+            except ValidationError:
+                pass
+            else:
+                future.set_result(msg)
+                self.pending_requests.pop(type(cmd))
         super().handle_sub_proto_msg(cmd, msg)
 
     async def send_sub_proto_handshake(self) -> None:
@@ -752,11 +780,10 @@ class ETHPeer(BasePeer):
         return request
 
     async def wait_for_block_headers(self, request: HeaderRequest) -> Tuple[BlockHeader, ...]:
-        response_waiter = asyncio.Event()
-        self.pending_requests[request] = response_waiter
-        await response_waiter.wait()
-        # TODO: error handling if request isn't matched
-        response = self.matched_responses.pop(request)
+        future = asyncio.Future()
+        self.pending_requests[eth.BlockHeaders] = (request, future)
+        # TODO: error handling and timeouts
+        response = await future
         return response
 
     async def get_block_headers(self,
@@ -1007,7 +1034,7 @@ class PeerPool(BaseService, AsyncIterable[BasePeer]):
                 request.validate_headers(headers)
                 parent, header = headers
                 vm_class.validate_header(header, parent, check_seal=True)
-            except ValidationError as e:
+            except EthValidationError as e:
                 raise DAOForkCheckFailure("Peer failed DAO fork check validation: {}".format(e))
 
         return msgs
