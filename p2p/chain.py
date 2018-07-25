@@ -248,23 +248,12 @@ class BaseHeaderChainSyncer(BaseService, PeerSubscriber):
             self, peer: HeaderRequestingPeer, start_at: int) -> Tuple[BlockHeader, ...]:
         """Fetch a batch of headers starting at start_at and return the ones we're missing."""
         self.logger.debug("Fetching chain segment starting at #%d", start_at)
-        request = peer.request_block_headers(
+        headers = peer.get_block_headers(
             start_at,
             peer.max_headers_fetch,
             skip=0,
             reverse=False,
         )
-
-        # Pass the peer's token to self.wait() because we want to abort if either we
-        # or the peer terminates.
-        headers = tuple(await self.wait(
-            self._new_headers.get(),
-            token=peer.cancel_token,
-            timeout=self._reply_timeout))
-
-        # check that the response headers are a valid match for our
-        # requested headers.
-        request.validate_headers(headers)
 
         # the inner list comprehension is required to get python to evaluate
         # the asynchronous comprehension
