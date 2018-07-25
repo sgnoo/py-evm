@@ -203,7 +203,10 @@ class BaseHeaderChainSyncer(BaseService, PeerSubscriber):
                 await peer.disconnect(DisconnectReason.timeout)
                 break
             except ValidationError as err:
-                self.logger.warn("Invalid header response sent by peer %s disconnecting: %s", peer, err)
+                self.logger.warn(
+                    "Invalid header response sent by peer %s disconnecting: %s",
+                    peer, err,
+                )
                 await peer.disconnect(DisconnectReason.useless_peer)
                 break
 
