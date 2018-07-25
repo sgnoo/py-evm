@@ -248,6 +248,7 @@ class BaseHeaderChainSyncer(BaseService, PeerSubscriber):
             self, peer: HeaderRequestingPeer, start_at: int) -> Tuple[BlockHeader, ...]:
         """Fetch a batch of headers starting at start_at and return the ones we're missing."""
         self.logger.debug("Fetching chain segment starting at #%d", start_at)
+
         headers = peer.get_block_headers(
             start_at,
             peer.max_headers_fetch,

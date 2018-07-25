@@ -281,6 +281,10 @@ class BasePeer(BaseService):
     head_td: int = None
     head_hash: Hash32 = None
 
+    # TODO: Instead of a fixed timeout, we should instead monitor response
+    # times for the peer and adjust our timeout accordingly
+    _response_timeout = 60
+
     def __init__(self,
                  remote: Node,
                  privkey: datatypes.PrivateKey,
@@ -783,7 +787,7 @@ class ETHPeer(BasePeer):
         future = asyncio.Future()
         self.pending_requests[eth.BlockHeaders] = (request, future)
         # TODO: error handling and timeouts
-        response = await future
+        response = self.wait(future, timeout=self._response_timeout)
         return response
 
     async def get_block_headers(self,
