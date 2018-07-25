@@ -280,6 +280,10 @@ class BasePeer(BaseService):
         self.start_time = datetime.datetime.now()
         self.received_msgs: Dict[protocol.Command, int] = collections.defaultdict(int)
 
+        # TODO: figure out this data structure
+        self.pending_requests = {}
+        self.matched_responses = {}
+
         self.egress_mac = egress_mac
         self.ingress_mac = ingress_mac
         # FIXME: Yes, the encryption is insecure, see: https://github.com/ethereum/devp2p/issues/32
@@ -693,6 +697,13 @@ class ETHPeer(BasePeer):
             if actual_td > self.head_td:
                 self.head_hash = actual_head
                 self.head_td = actual_td
+        elif isinstance(cmd, eth.BlockHeaders):
+            # try to match with a request
+            for request, waiter in self.pending_requests.items():
+                if request.is_valid_headers(msg):
+                    self.matched_responses[request] = msg
+                    waiter.set()
+                    break
         super().handle_sub_proto_msg(cmd, msg)
 
     async def send_sub_proto_handshake(self) -> None:
@@ -739,6 +750,22 @@ class ETHPeer(BasePeer):
             request.reverse,
         )
         return request
+
+    async def wait_for_block_headers(self, request: HeaderRequest) -> Tuple[BlockHeader, ...]:
+        response_waiter = asyncio.Event()
+        self.pending_requests[request] = response_waiter
+        await response_waiter.wait()
+        # TODO: error handling if request isn't matched
+        response = self.matched_responses.pop(request)
+        return response
+
+    async def get_block_headers(self,
+                                block_number_or_hash: BlockIdentifier,
+                                max_headers: int = None,
+                                skip: int = 0,
+                                reverse: bool = True) -> Tuple[BlockHeader, ...]:
+        request = self.request_block_headers(block_number_or_hash, max_headers, skip, reverse)
+        return await self.wait_for_block_headers(request)
 
 
 class PeerSubscriber(ABC):
