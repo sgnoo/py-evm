@@ -142,6 +142,8 @@ def initialize_database(chain_config: ChainConfig, chaindb: AsyncChainDB) -> Non
             chaindb.persist_header(ROPSTEN_GENESIS_HEADER)
         elif chain_config.network_id == MAINNET_NETWORK_ID:
             chaindb.persist_header(MAINNET_GENESIS_HEADER)
+        elif chain_config.network_id == 2755:
+            chaindb.persist_header(ROPSTEN_GENESIS_HEADER)
         else:
             # TODO: add genesis data to ChainConfig and if it's present, use it
             # here to initialize the chain.
@@ -217,6 +219,8 @@ def serve_chaindb(chain_config: ChainConfig, base_db: BaseDB) -> None:
     if chain_config.network_id == MAINNET_NETWORK_ID:
         chain_class = MainnetChain
     elif chain_config.network_id == ROPSTEN_NETWORK_ID:
+        chain_class = RopstenChain
+    elif chain_config.network_id == 2755:
         chain_class = RopstenChain
     else:
         raise NotImplementedError(

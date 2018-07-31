@@ -90,6 +90,10 @@ class ChainConfig:
                 self.bootstrap_nodes = tuple(
                     KademliaNode.from_uri(enode) for enode in ROPSTEN_BOOTNODES
                 )
+            elif self.network_id == 2755:
+                self.bootstrap_nodes = tuple(
+                    KademliaNode.from_uri(enode) for enode in ROPSTEN_BOOTNODES
+                )
         else:
             self.bootstrap_nodes = bootstrap_nodes
 
@@ -230,6 +234,8 @@ class ChainConfig:
             if self.network_id == MAINNET_NETWORK_ID:
                 return MainnetFullNode
             elif self.network_id == ROPSTEN_NETWORK_ID:
+                return RopstenFullNode
+            elif self.network_id == 2755:
                 return RopstenFullNode
             else:
                 raise NotImplementedError(

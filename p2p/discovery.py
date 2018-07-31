@@ -458,7 +458,7 @@ def _test() -> None:
     listen_host = '127.0.0.1'
     # Listen on a port other than 30303 so that we can test against a local geth instance
     # running on that port.
-    listen_port = 30304
+    listen_port = 30303
     privkey = ecies.generate_privkey()
     addr = kademlia.Address(listen_host, listen_port, listen_port)
     if args.bootnode:
