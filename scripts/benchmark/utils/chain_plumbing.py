@@ -108,30 +108,30 @@ def chain_without_pow(
 def get_chain(vm: Type[BaseVM], **kwargs) -> MiningChain:
     # Checking contract code types,
     # simply judge 'string' type is not a contract code.
-    addresses, contracts = kwargs['EOA'], kwargs['CA']
-
     state_list = []
 
     # adding EOA accounts state
-    for address in addresses:
-        _setup = AddressSetup(
-            address=address,
-            balance=DEFAULT_INITIAL_BALANCE,
-            code=b'')
+    if 'EOA' in kwargs:
+        for address in kwargs['EOA']:
+            _setup = AddressSetup(
+                address=address,
+                balance=DEFAULT_INITIAL_BALANCE,
+                code=b'')
 
-        state_list.append(_setup)
+            state_list.append(_setup)
 
     # adding CA accounts state
-    for contract in contracts:
-        # checking code type
-        assert contract['code'] != None
+    if 'CA' in kwargs:
+        for contract in kwargs['CA']:
+            # checking code exists
+            assert contract['code'] != None
 
-        _setup = AddressSetup(
-            address=decode_hex(contract['address']),
-            balance=0,
-            code=decode_hex(contract['code']))
+            _setup = AddressSetup(
+                address=decode_hex(contract['address']),
+                balance=0,
+                code=decode_hex(contract['code']))
 
-        state_list.append(_setup)
+            state_list.append(_setup)
 
     return chain_without_pow(
         MemoryDB(),
