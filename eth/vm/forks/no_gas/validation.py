@@ -10,5 +10,14 @@ from eth.vm.forks.frontier.validation import (
 
 def validate_no_gas_transaction(state: StateAPI,
                                 transaction: SignedTransactionAPI) -> None:
-    transaction.gas_price = 0
-    validate_frontier_transaction(state, transaction)
+    sender_balance = state.get_balance(transaction.sender)
+    total_cost = transaction.value
+
+    if sender_balance < total_cost:
+        raise ValidationError("Sender account balance cannot afford txn")
+
+    sender_nonce = state.get_nonce(transaction.sender)
+    if sender_nonce != transaction.nonce:
+        raise ValidationError(
+            f"Invalid transaction nonce: Expected {sender_nonce}, but got {transaction.nonce}"
+        )
